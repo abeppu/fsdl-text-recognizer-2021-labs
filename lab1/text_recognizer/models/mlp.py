@@ -6,9 +6,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-FC1_DIM = 1024
-FC2_DIM = 128
-
+WIDTH = 1024
+DEPTH = 2
 
 class MLP(nn.Module):
     """Simple MLP suitable for recognizing single characters."""
@@ -24,27 +23,28 @@ class MLP(nn.Module):
         input_dim = np.prod(data_config["input_dims"])
         num_classes = len(data_config["mapping"])
 
-        fc1_dim = self.args.get("fc1", FC1_DIM)
-        fc2_dim = self.args.get("fc2", FC2_DIM)
+        width = self.args.get("width", WIDTH)
+        depth = self.args.get("numlayers", DEPTH)
 
         self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(input_dim, fc1_dim)
-        self.fc2 = nn.Linear(fc1_dim, fc2_dim)
-        self.fc3 = nn.Linear(fc2_dim, num_classes)
+        self.fcs = nn.ModuleList()
+        for i in range(depth+1):
+            l = input_dim if i == 0 else width
+            r = num_classes if i == depth else width
+            print(f"{i} <- Linear({l}, {r})")
+            self.fcs.append(nn.Linear(l, r))
 
     def forward(self, x):
         x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.dropout(x)
-        x = self.fc3(x)
-        return x
+        for i in range(len(self.fcs)):
+            x = self.fcs[i](x)
+            if i == len(self.fcs) - 1:
+                return x
+            x = F.relu(x)
+            x = self.dropout(x)
 
     @staticmethod
     def add_to_argparse(parser):
-        parser.add_argument("--fc1", type=int, default=1024)
-        parser.add_argument("--fc2", type=int, default=128)
+        parser.add_argument("--numlayers", type=int, default=2)
+        parser.add_argument("--width", type=int, default=1024)
         return parser
